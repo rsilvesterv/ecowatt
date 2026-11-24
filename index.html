@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="id" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EcoWatt — Smart Energy Monitoring</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            eco: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+            },
+            tb: {
+              blue: '#305680',
+              card: '#ffffff',
+              bg: '#f3f4f6',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    /* Custom scrollbar for responsive tables */
+    .table-scroll::-webkit-scrollbar {
+      height: 6px;
+    }
+    .table-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.5);
+      border-radius: 9999px;
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+      50% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    }
+    .overload-pulse {
+      animation: pulse-border 1.6s infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 min-h-screen flex flex-col">
+
+  <!-- TOP NAVIGATION BAR (ThingsBoard + EcoWatt Style) -->
+  <header class="sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="max-w-[1600px] mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+      <!-- Brand & Status -->
+      <div class="flex items-center gap-2.5 sm:gap-3">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm shrink-0">
+          <i data-lucide="zap" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-tight">
+              EcoWatt <span class="hidden sm:inline font-normal text-slate-400">|</span> <span class="text-emerald-600 dark:text-emerald-400 font-semibold text-sm sm:text-base">Smart Energy Monitoring</span>
+            </h1>
+            <span id="espStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>ESP32 Online • PZEM-004T</span>
+            </span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 hidden xs:block">
+            Prototipe Monitoring &amp; Peringatan Dini Konsumsi Energi Listrik IoT
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2">
+        <button id="btnTestOverload" onclick="triggerOverloadSimulation()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-amber-500 hover:bg-amber-600 active:scale-95 text-white shadow-sm transition cursor-pointer">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          <span>Test Overload</span>
+        </button>
+
+        <button id="btnResetNormal" onclick="resetNormalSimulation()" class="hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-sm transition cursor-pointer">
+          <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+          <span>Normal</span>
+        </button>
+
+        <button id="themeToggle" onclick="toggleDarkMode()" aria-label="Ganti Tema" class="p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer">
+          <i id="themeIcon" data-lucide="moon" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- EARLY WARNING BANNER (Muncul otomatis saat Daya > Batas Maksimum) -->
+  <div id="earlyWarningBanner" class="hidden bg-red-600 text-white px-4 py-3 shadow-md transition-all">
+    <div class="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+      <div class="flex items-start sm:items-center gap-2.5">
+        <i data-lucide="bell-ring" class="w-5 h-5 shrink-0 mt-0.5 sm:mt-0 animate-bounce"></i>
+        <div class="text-xs sm:text-sm">
+          <span class="font-bold uppercase tracking-wide">PERINGATAN DINI (OVERLOAD):</span>
+          <span id="bannerWarningText">Daya aktual pada Stopkontak A melebihi batas maksimum yang ditetapkan! Harap kurangi beban elektronik.</span>
+        </div>
+      </div>
+      <button onclick="dismissBanner()" class="self-end sm:self-center text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md font-medium transition cursor-pointer">
+        Tutup Peringatan
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
+
+    <!-- 1. KPI SUMMARY CARDS (4 Kolom di Desktop, 2x2 di HP) -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <!-- Voltage Card -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Tegangan (PLN)</span>
+          <span class="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1.5">
+          <span id="kpiVoltage" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">221.4</span>
+          <span class="text-xs sm:text-sm font-medium text-slate-500">Volt</span>
+        </div>
+        <p id="kpiVoltageStatus" class="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+          <span>● Stabil (200V - 240V)</span>
+        </p>
+      </div>
+
+      <!-- Amperage Card -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Arus Listrik (CT)</span>
+          <span class="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+            <i data-lucide="gauge" class="w-4 h-4"></i>
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1.5">
+          <span id="kpiAmperage" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">1.28</span>
+          <span class="text-xs sm:text-sm font-medium text-slate-500">Ampere</span>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+          Stopkontak A (Sensor Utama)
+        </p>
+      </div>
+
+      <!-- Active Power Card (Watt) -->
+      <div id="powerCardBox" class="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-sm transition-all">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Daya Aktif</span>
+          <span id="powerIconBg" class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+            <i data-lucide="zap" class="w-4 h-4"></i>
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1.5">
+          <span id="kpiPower" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">283.4</span>
+          <span class="text-xs sm:text-sm font-medium text-slate-500">Watt</span>
+        </div>
+        <p id="kpiPowerLimitText" class="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
+          Aman (Batas: 450 W)
+        </p>
+      </div>
+
+      <!-- Total Energy Card (kWh & Estimasi Rp) -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Total Energi</span>
+          <span class="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1.5">
+          <span id="kpiEnergy" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">1.425</span>
+          <span class="text-xs sm:text-sm font-medium text-slate-500">kWh</span>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+          Est. Biaya: <span id="kpiCost" class="font-semibold text-slate-700 dark:text-slate-300">Rp 2.058</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- 2. THRESHOLD CONTROL & SIMULATION PANEL (Pengaturan Batas Watt & Simulasi Presentasi) -->
+    <section class="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+            <h2 class="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+              Pengaturan Batas Daya Maksimum &amp; Peringatan Dini
+            </h2>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Atur ambang batas Watt. Jika beban melebihi batas ini, sistem mengirimkan notifikasi peringatan tanpa memutus aliran listrik.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-4 bg-slate-50 dark:bg-slate-800/70 p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+          <!-- Control 1: Batas Maksimum Watt -->
+          <div class="flex-1 min-w-[210px]">
+            <div class="flex justify-between items-center mb-1">
+              <label for="maxWattSlider" class="text-xs font-medium text-slate-700 dark:text-slate-300">Batas Maksimum Daya:</label>
+              <div class="flex items-center gap-1">
+                <input id="maxWattInput" type="number" min="50" max="2200" step="10" value="450" onchange="updateMaxWattFromInput(this.value)" class="w-16 px-1.5 py-0.5 text-right text-xs font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400" />
+                <span class="text-xs font-semibold text-slate-500">W</span>
+              </div>
+            </div>
+            <input id="maxWattSlider" type="range" min="50" max="2200" step="10" value="450" oninput="updateMaxWatt(this.value)" class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
+            <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+              <span>50 W</span>
+              <span>1100 W</span>
+              <span>2200 W</span>
+            </div>
+          </div>
+
+          <div class="hidden lg:block w-px h-10 bg-slate-200 dark:bg-slate-700"></div>
+
+          <!-- Control 2: Simulasi Beban Perangkat Elektronik -->
+          <div class="flex-1 min-w-[210px]">
+            <div class="flex justify-between items-center mb-1">
+              <label for="simLoadSlider" class="text-xs font-medium text-slate-700 dark:text-slate-300">Simulasi Beban Colokan:</label>
+              <span id="simLoadLabel" class="text-xs font-bold text-blue-600 dark:text-blue-400">280 W (Normal)</span>
+            </div>
+            <input id="simLoadSlider" type="range" min="40" max="1500" step="10" value="280" oninput="updateSimulatedLoad(this.value)" class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+            <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+              <span>40 W (Charger)</span>
+              <span>350 W (PC)</span>
+              <span>1500 W (Setrika)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. THINGSBOARD-STYLE WIDGET GRID (Row 1: Voltage, Energy Consumption Bar, Energy Meters Table) -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      
+      <!-- Widget 1: Voltage Line Chart with Threshold Lines -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Voltage</h3>
+            <p class="text-[11px] text-slate-400">Real-time • Ambang batas 200V – 240V</p>
+          </div>
+          <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">V</span>
+        </div>
+        <div class="relative h-56 sm:h-60 w-full">
+          <canvas id="voltageChart"></canvas>
+        </div>
+        <!-- Legend Summary like ThingsBoard -->
+        <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Stopkontak A (Lab)
+            </span>
+            <span id="avgVoltA" class="font-semibold">221.40 V</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Stopkontak B (Kelas)
+            </span>
+            <span id="avgVoltB" class="font-semibold">219.85 V</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Stopkontak C (Umum)
+            </span>
+            <span id="avgVoltC" class="font-semibold">223.10 V</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget 2: Energy Consumption History (Bar Chart) -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Energy consumption</h3>
+            <p class="text-[11px] text-slate-400">History - Hari Ini (Per Interval Jam)</p>
+          </div>
+          <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">kWh</span>
+        </div>
+        <div class="relative h-56 sm:h-60 w-full">
+          <canvas id="energyBarChart"></canvas>
+        </div>
+        <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Stopkontak A
+            </span>
+            <span id="histKwhA" class="font-semibold">1.43 kWh</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Stopkontak B
+            </span>
+            <span class="font-semibold">2.15 kWh</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Stopkontak C
+            </span>
+            <span class="font-semibold">3.84 kWh</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget 3: Energy Meters Table -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Energy meters</h3>
+              <p class="text-[11px] text-slate-400">Daftar titik sensor PZEM-004T aktif</p>
+            </div>
+            <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">3 Node Aktif</span>
+          </div>
+
+          <div class="overflow-x-auto table-scroll">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                  <th class="py-2.5 pr-2 font-semibold">Name</th>
+                  <th class="py-2.5 px-2 font-semibold">Label</th>
+                  <th class="py-2.5 px-2 font-semibold text-right">Voltage, V</th>
+                  <th class="py-2.5 px-2 font-semibold text-right">Amperage, A</th>
+                  <th class="py-2.5 pl-2 font-semibold text-right">Power, W</th>
+                </tr>
+              </thead>
+              <tbody id="energyMetersBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                <!-- Diisi otomatis via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+          <span>Update interval: 2 detik</span>
+          <span>1 – 3 of 3</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. THINGSBOARD-STYLE WIDGET GRID (Row 2: Pie Chart, Amperage Area Chart, Alarms Table) -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+      <!-- Widget 4: Energy Consumption Pie Chart -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Energy consumption</h3>
+            <p class="text-[11px] text-slate-400">Proporsi pemakaian energi antar stopkontak</p>
+          </div>
+          <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">%</span>
+        </div>
+        <div class="relative h-56 sm:h-60 w-full flex items-center justify-center">
+          <canvas id="energyPieChart"></canvas>
+        </div>
+        <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></span>
+            <span class="truncate text-slate-600 dark:text-slate-300">Meter A: <strong id="pieValA">1.43 kWh</strong></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+            <span class="truncate text-slate-600 dark:text-slate-300">Meter B: <strong>2.15 kWh</strong></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+            <span class="truncate text-slate-600 dark:text-slate-300">Meter C: <strong>3.84 kWh</strong></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0"></span>
+            <span class="truncate text-slate-600 dark:text-slate-300">Total: <strong id="pieTotal">7.42 kWh</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget 5: Amperage Area Chart -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Amperage</h3>
+            <p class="text-[11px] text-slate-400">Tren arus listrik real-time (Trafo CT)</p>
+          </div>
+          <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">A</span>
+        </div>
+        <div class="relative h-56 sm:h-60 w-full">
+          <canvas id="amperageChart"></canvas>
+        </div>
+        <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Stopkontak A
+            </span>
+            <span id="avgAmpA" class="font-semibold">1.28 A</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Stopkontak B
+            </span>
+            <span id="avgAmpB" class="font-semibold">3.42 A</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Stopkontak C
+            </span>
+            <span id="avgAmpC" class="font-semibold">5.15 A</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget 6: Alarms Table (Early Warning Log) -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span>Alarms</span>
+                <span id="alarmCountBadge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400">1</span>
+              </h3>
+              <p class="text-[11px] text-slate-400">Realtime - Log Peringatan Dini</p>
+            </div>
+            <button onclick="clearAllAlarms()" class="text-[11px] text-slate-500 hover:text-red-600 dark:hover:text-red-400 font-medium cursor-pointer">
+              Hapus Semua
+            </button>
+          </div>
+
+          <div class="overflow-x-auto table-scroll max-h-64 overflow-y-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                  <th class="py-2 pr-2 font-semibold">Start time</th>
+                  <th class="py-2 px-1.5 font-semibold">Originator</th>
+                  <th class="py-2 px-1.5 font-semibold">Type</th>
+                  <th class="py-2 px-1.5 font-semibold">Severity</th>
+                  <th class="py-2 pl-1.5 font-semibold text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="alarmsTableBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                <!-- Diisi otomatis via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+          <span>Mode: Notifikasi Peringatan (Tanpa Cut-Off)</span>
+          <span id="alarmFooterCount">1 – 1 of 1</span>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3 px-4 text-center text-xs text-slate-500 dark:text-slate-400">
+    EcoWatt IoT Dashboard • Prototipe Monitoring Energi Listrik ESP32 + PZEM-004T
+  </footer>
+
+  <!-- TOAST NOTIFICATION POPUP -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs sm:max-w-sm w-full pointer-events-none"></div>
+
+  <script>
+    // Inisialisasi ikon Lucide
+    lucide.createIcons();
+
+    // State Aplikasi
+    let maxWattLimit = 450;
+    let simulatedBaseWatt = 280;
+    let isOverloadAlertActive = false;
+    let lastAlarmTimestamp = 0;
+
+    let energyMeterA = 1.425; // kWh
+    const energyMeterB = 2.150;
+    const energyMeterC = 3.840;
+    const tariffPerKwh = 1444.70; // Tarif dasar listrik Rp/kWh
+
+    // Data awal untuk Alarms Table
+    let alarmsList = [
+      {
+        id: 1,
+        time: formatTimeNow(new Date(Date.now() - 1000 * 60 * 14)),
+        originator: 'Stopkontak B',
+        type: 'High Voltage Warning',
+        severity: 'Warning',
+        acknowledged: false
+      }
+    ];
+
+    // Helper format waktu
+    function formatTimeNow(dateObj = new Date()) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+    }
+
+    function formatShortTime(dateObj = new Date()) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+    }
+
+    // Dark Mode Toggle
+    function toggleDarkMode() {
+      const html = document.documentElement;
+      const icon = document.getElementById('themeIcon');
+      html.classList.toggle('dark');
+      const isDark = html.classList.contains('dark');
+      icon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+      lucide.createIcons();
+      updateChartsTheme(isDark);
+    }
+
+    // Toast Notification
+    function showToast(title, message, type = 'warning') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bgClass = type === 'critical'
+        ? 'bg-red-600 text-white border-red-700'
+        : 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700';
+
+      toast.className = `pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 ${bgClass}`;
+      toast.innerHTML = `
+        <i data-lucide="${type === 'critical' ? 'alert-octagon' : 'info'}" class="w-5 h-5 shrink-0 mt-0.5"></i>
+        <div class="flex-1 text-xs">
+          <p class="font-bold">${title}</p>
+          <p class="opacity-90 mt-0.5">${message}</p>
+        </div>
+      `;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 4500);
+    }
+
+    // Pengaturan Batas Maksimum Watt
+    function updateMaxWatt(val) {
+      maxWattLimit = parseInt(val, 10) || 450;
+      document.getElementById('maxWattInput').value = maxWattLimit;
+      document.getElementById('maxWattSlider').value = maxWattLimit;
+      evaluatePowerStatus(simulatedBaseWatt);
+    }
+
+    function updateMaxWattFromInput(val) {
+      let parsed = parseInt(val, 10);
+      if (isNaN(parsed)) parsed = 450;
+      parsed = Math.max(50, Math.min(2200, parsed));
+      updateMaxWatt(parsed);
+    }
+
+    // Pengaturan Simulasi Beban
+    function updateSimulatedLoad(val) {
+      simulatedBaseWatt = parseInt(val, 10) || 280;
+      const label = document.getElementById('simLoadLabel');
+      const isOver = simulatedBaseWatt > maxWattLimit;
+      label.textContent = `${simulatedBaseWatt} W (${isOver ? 'Melebihi Batas!' : 'Normal'})`;
+      label.className = isOver
+        ? 'text-xs font-bold text-red-600 dark:text-red-400'
+        : 'text-xs font-bold text-blue-600 dark:text-blue-400';
+
+      evaluatePowerStatus(simulatedBaseWatt);
+    }
+
+    // Tombol Cepat Simulasi Overload untuk Presentasi
+    function triggerOverloadSimulation() {
+      const targetLoad = Math.min(1500, maxWattLimit + 250);
+      document.getElementById('simLoadSlider').value = targetLoad;
+      updateSimulatedLoad(targetLoad);
+      document.getElementById('btnTestOverload').classList.add('hidden');
+      document.getElementById('btnResetNormal').classList.remove('hidden');
+    }
+
+    function resetNormalSimulation() {
+      const safeLoad = Math.max(80, Math.floor(maxWattLimit * 0.6));
+      document.getElementById('simLoadSlider').value = safeLoad;
+      updateSimulatedLoad(safeLoad);
+      document.getElementById('btnResetNormal').classList.add('hidden');
+      document.getElementById('btnTestOverload').classList.remove('hidden');
+    }
+
+    function dismissBanner() {
+      document.getElementById('earlyWarningBanner').classList.add('hidden');
+    }
+
+    // Evaluasi Status Daya & Peringatan Dini
+    function evaluatePowerStatus(currentWatt) {
+      const powerCard = document.getElementById('powerCardBox');
+      const powerIconBg = document.getElementById('powerIconBg');
+      const limitText = document.getElementById('kpiPowerLimitText');
+      const banner = document.getElementById('earlyWarningBanner');
+
+      if (currentWatt > maxWattLimit) {
+        powerCard.classList.add('border-red-500', 'overload-pulse', 'bg-red-50/40', 'dark:bg-red-950/20');
+        powerIconBg.className = 'p-1.5 rounded-lg bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400';
+        limitText.textContent = `OVERLOAD! Batas: ${maxWattLimit} W`;
+        limitText.className = 'text-[11px] text-red-600 dark:text-red-400 mt-1 font-bold';
+
+        document.getElementById('bannerWarningText').textContent =
+          `Daya aktual (${currentWatt.toFixed(1)} W) pada Stopkontak A melebihi batas maksimum (${maxWattLimit} W)! Harap matikan perangkat berdaya besar.`;
+        banner.classList.remove('hidden');
+
+        // Catat log alarm baru (maksimal 1 log tiap 8 detik agar tidak spam)
+        const now = Date.now();
+        if (!isOverloadAlertActive || now - lastAlarmTimestamp > 8000) {
+          isOverloadAlertActive = true;
+          lastAlarmTimestamp = now;
+          addAlarm('Stopkontak A', `Overload Watt (${currentWatt.toFixed(0)}W > ${maxWattLimit}W)`, 'Critical');
+          showToast(
+            'Peringatan Batas Daya!',
+            `Stopkontak A mencapai ${currentWatt.toFixed(1)} W (Batas: ${maxWattLimit} W).`,
+            'critical'
+          );
+        }
+      } else {
+        isOverloadAlertActive = false;
+        powerCard.classList.remove('border-red-500', 'overload-pulse', 'bg-red-50/40', 'dark:bg-red-950/20');
+        powerIconBg.className = 'p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400';
+        limitText.textContent = `Aman (Batas: ${maxWattLimit} W)`;
+        limitText.className = 'text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium';
+        banner.classList.add('hidden');
+      }
+    }
+
+    // Manajemen Tabel Alarms
+    function addAlarm(originator, type, severity) {
+      alarmsList.unshift({
+        id: Date.now(),
+        time: formatTimeNow(),
+        originator,
+        type,
+        severity,
+        acknowledged: false
+      });
+      if (alarmsList.length > 15) alarmsList.pop();
+      renderAlarmsTable();
+    }
+
+    function acknowledgeAlarm(id) {
+      const alarm = alarmsList.find((a) => a.id === id);
+      if (alarm) {
+        alarm.acknowledged = true;
+        renderAlarmsTable();
+      }
+    }
+
+    function deleteAlarm(id) {
+      alarmsList = alarmsList.filter((a) => a.id !== id);
+      renderAlarmsTable();
+    }
+
+    function clearAllAlarms() {
+      alarmsList = [];
+      renderAlarmsTable();
+    }
+
+    function renderAlarmsTable() {
+      const tbody = document.getElementById('alarmsTableBody');
+      const badge = document.getElementById('alarmCountBadge');
+      const footerCount = document.getElementById('alarmFooterCount');
+
+      const activeCount = alarmsList.filter((a) => !a.acknowledged).length;
+      badge.textContent = activeCount;
+      footerCount.textContent = alarmsList.length > 0 ? `1 – ${alarmsList.length} of ${alarmsList.length}` : '0 of 0';
+
+      if (alarmsList.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="py-8 text-center text-slate-400 text-xs">
+              Tidak ada peringatan aktif. Semua konsumsi daya dalam batas aman.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = alarmsList.map((alarm) => {
+        const sevColor = alarm.severity === 'Critical'
+          ? 'text-red-600 dark:text-red-400 font-bold'
+          : 'text-amber-600 dark:text-amber-400 font-semibold';
+        const rowOpacity = alarm.acknowledged ? 'opacity-60' : '';
+
+        return `
+          <tr class="${rowOpacity} hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+            <td class="py-2 pr-2 whitespace-nowrap text-[11px] text-slate-600 dark:text-slate-300">${alarm.time.split(' ')[1]}</td>
+            <td class="py-2 px-1.5 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">${alarm.originator}</td>
+            <td class="py-2 px-1.5 text-slate-600 dark:text-slate-300">${alarm.type}</td>
+            <td class="py-2 px-1.5 ${sevColor}">${alarm.severity}</td>
+            <td class="py-2 pl-1.5 text-right whitespace-nowrap">
+              ${!alarm.acknowledged ? `
+                <button onclick="acknowledgeAlarm(${alarm.id})" title="Tandai Dibaca" class="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded cursor-pointer">
+                  ✓
+                </button>
+              ` : '<span class="text-[10px] text-slate-400 mr-1">Ack</span>'}
+              <button onclick="deleteAlarm(${alarm.id})" title="Hapus" class="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer">
+                ✕
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render Tabel Energy Meters
+    function renderEnergyMetersTable(vA, aA, wA, vB, aB, wB, vC, aC, wC) {
+      const tbody = document.getElementById('energyMetersBody');
+      const rows = [
+        { name: 'Stopkontak A', label: 'Ruang Lab (Utama)', v: vA, a: aA, w: wA, isOver: wA > maxWattLimit },
+        { name: 'Stopkontak B', label: 'Ruang Kelas 01', v: vB, a: aB, w: wB, isOver: false },
+        { name: 'Stopkontak C', label: 'Area Koridor', v: vC, a: aC, w: wC, isOver: false },
+      ];
+
+      tbody.innerHTML = rows.map((r) => `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+          <td class="py-2.5 pr-2 font-medium text-slate-900 dark:text-white whitespace-nowrap">${r.name}</td>
+          <td class="py-2.5 px-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">${r.label}</td>
+          <td class="py-2.5 px-2 text-right font-mono">${r.v.toFixed(2)}</td>
+          <td class="py-2.5 px-2 text-right font-mono">${r.a.toFixed(2)}</td>
+          <td class="py-2.5 pl-2 text-right font-mono font-semibold ${r.isOver ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}">
+            ${r.w.toFixed(2)}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // ==================== INISIALISASI CHART.JS ====================
+    const initialLabels = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(Date.now() - (9 - i) * 2000);
+      return formatShortTime(d);
+    });
+
+    // 1. Voltage Line Chart (dengan garis batas 240V & 200V)
+    const voltageCtx = document.getElementById('voltageChart').getContext('2d');
+    const voltageChart = new Chart(voltageCtx, {
+      type: 'line',
+      data: {
+        labels: [...initialLabels],
+        datasets: [
+          {
+            label: 'Stopkontak A',
+            data: [220.5, 221.2, 220.8, 222.1, 221.9, 221.0, 220.7, 221.5, 221.8, 221.4],
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0
+          },
+          {
+            label: 'Stopkontak B',
+            data: [219.1, 219.5, 220.0, 219.8, 219.3, 220.2, 219.9, 219.7, 220.1, 219.8],
+            borderColor: '#10b981',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0
+          },
+          {
+            label: 'Stopkontak C',
+            data: [223.0, 222.8, 223.4, 223.1, 222.9, 223.5, 223.2, 223.0, 222.7, 223.1],
+            borderColor: '#3b82f6',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0
+          },
+          {
+            label: 'Batas Atas (240V)',
+            data: Array(10).fill(240),
+            borderColor: 'rgba(239, 68, 68, 0.5)',
+            borderDash: [5, 5],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false
+          },
+          {
+            label: 'Batas Bawah (200V)',
+            data: Array(10).fill(200),
+            borderColor: 'rgba(245, 158, 11, 0.6)',
+            borderDash: [5, 5],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            min: 190,
+            max: 250,
+            grid: { color: 'rgba(148, 163, 184, 0.15)' },
+            ticks: { font: { size: 10 } }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, maxTicksLimit: 5 }
+          }
+        }
+      }
+    });
+
+    // 2. Energy Consumption History (Bar Chart)
+    const energyBarCtx = document.getElementById('energyBarChart').getContext('2d');
+    const energyBarChart = new Chart(energyBarCtx, {
+      type: 'bar',
+      data: {
+        labels: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00'],
+        datasets: [
+          {
+            label: 'Stopkontak A',
+            data: [0.18, 0.22, 0.25, 0.21, 0.15, 0.20, 0.22],
+            backgroundColor: '#ef4444',
+            borderRadius: 3
+          },
+          {
+            label: 'Stopkontak B',
+            data: [0.28, 0.31, 0.35, 0.30, 0.24, 0.33, 0.34],
+            backgroundColor: '#10b981',
+            borderRadius: 3
+          },
+          {
+            label: 'Stopkontak C',
+            data: [0.48, 0.55, 0.60, 0.52, 0.45, 0.61, 0.63],
+            backgroundColor: '#3b82f6',
+            borderRadius: 3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148, 163, 184, 0.15)' },
+            ticks: { font: { size: 10 } }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 } }
+          }
+        }
+      }
+    });
+
+    // 3. Energy Consumption Share (Pie Chart)
+    const energyPieCtx = document.getElementById('energyPieChart').getContext('2d');
+    const energyPieChart = new Chart(energyPieCtx, {
+      type: 'pie',
+      data: {
+        labels: ['Stopkontak A', 'Stopkontak B', 'Stopkontak C'],
+        datasets: [{
+          data: [energyMeterA, energyMeterB, energyMeterC],
+          backgroundColor: ['#ef4444', '#10b981', '#3b82f6'],
+          borderWidth: 2,
+          borderColor: '#ffffff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const val = context.parsed;
+                const pct = ((val / total) * 100).toFixed(1);
+                return `${context.label}: ${val.toFixed(2)} kWh (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // 4. Amperage Area Chart
+    const amperageCtx = document.getElementById('amperageChart').getContext('2d');
+    const amperageChart = new Chart(amperageCtx, {
+      type: 'line',
+      data: {
+        labels: [...initialLabels],
+        datasets: [
+          {
+            label: 'Stopkontak A',
+            data: [1.25, 1.27, 1.26, 1.30, 1.28, 1.29, 1.27, 1.28, 1.26, 1.28],
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.25)',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2,
+            pointRadius: 0
+          },
+          {
+            label: 'Stopkontak B',
+            data: [3.35, 3.40, 3.38, 3.45, 3.42, 3.41, 3.39, 3.44, 3.40, 3.42],
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.25)',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2,
+            pointRadius: 0
+          },
+          {
+            label: 'Stopkontak C',
+            data: [5.10, 5.15, 5.12, 5.20, 5.18, 5.14, 5.16, 5.19, 5.13, 5.15],
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.25)',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2,
+            pointRadius: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148, 163, 184, 0.15)' },
+            ticks: { font: { size: 10 } }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, maxTicksLimit: 5 }
+          }
+        }
+      }
+    });
+
+    function updateChartsTheme(isDark) {
+      const tickColor = isDark ? '#94a3b8' : '#64748b';
+      [voltageChart, energyBarChart, amperageChart].forEach((chart) => {
+        chart.options.scales.x.ticks.color = tickColor;
+        chart.options.scales.y.ticks.color = tickColor;
+        chart.update();
+      });
+      energyPieChart.data.datasets[0].borderColor = isDark ? '#0f172a' : '#ffffff';
+      energyPieChart.update();
+    }
+
+    // ==================== LOOP SIMULASI REAL-TIME PZEM-004T (Setiap 2 Detik) ====================
+    function simulateSensorTick() {
+      const nowStr = formatShortTime();
+
+      // Fluktuasi kecil realistis ala sensor PZEM-004T
+      const voltA = 220 + (Math.random() * 3.2 - 1.2);
+      const voltB = 219 + (Math.random() * 2.8 - 1.0);
+      const voltC = 222 + (Math.random() * 3.0 - 1.0);
+
+      const jitterWatt = (Math.random() * 14 - 7);
+      const wattA = Math.max(15, simulatedBaseWatt + jitterWatt);
+      const ampA = wattA / voltA;
+
+      const ampB = 3.40 + (Math.random() * 0.25 - 0.12);
+      const wattB = voltB * ampB;
+
+      const ampC = 5.15 + (Math.random() * 0.35 - 0.15);
+      const wattC = voltC * ampC;
+
+      // Akumulasi kWh (2 detik = 2/3600 jam)
+      energyMeterA += (wattA / 1000) * (2 / 3600);
+      const estCost = Math.round(energyMeterA * tariffPerKwh);
+
+      // Update KPI Cards
+      document.getElementById('kpiVoltage').textContent = voltA.toFixed(1);
+      document.getElementById('kpiAmperage').textContent = ampA.toFixed(2);
+      document.getElementById('kpiPower').textContent = wattA.toFixed(1);
+      document.getElementById('kpiEnergy').textContent = energyMeterA.toFixed(3);
+      document.getElementById('kpiCost').textContent = `Rp ${estCost.toLocaleString('id-ID')}`;
+
+      // Update Legend Averages
+      document.getElementById('avgVoltA').textContent = `${voltA.toFixed(2)} V`;
+      document.getElementById('avgVoltB').textContent = `${voltB.toFixed(2)} V`;
+      document.getElementById('avgVoltC').textContent = `${voltC.toFixed(2)} V`;
+
+      document.getElementById('avgAmpA').textContent = `${ampA.toFixed(2)} A`;
+      document.getElementById('avgAmpB').textContent = `${ampB.toFixed(2)} A`;
+      document.getElementById('avgAmpC').textContent = `${ampC.toFixed(2)} A`;
+
+      document.getElementById('histKwhA').textContent = `${energyMeterA.toFixed(2)} kWh`;
+      document.getElementById('pieValA').textContent = `${energyMeterA.toFixed(2)} kWh`;
+      const totalKwhAll = energyMeterA + energyMeterB + energyMeterC;
+      document.getElementById('pieTotal').textContent = `${totalKwhAll.toFixed(2)} kWh`;
+
+      // Evaluasi Batas Daya (Early Warning)
+      evaluatePowerStatus(wattA);
+
+      // Update Table Energy Meters
+      renderEnergyMetersTable(voltA, ampA, wattA, voltB, ampB, wattB, voltC, ampC, wattC);
+
+      // Update Voltage Line Chart
+      voltageChart.data.labels.push(nowStr);
+      voltageChart.data.labels.shift();
+      voltageChart.data.datasets[0].data.push(voltA); voltageChart.data.datasets[0].data.shift();
+      voltageChart.data.datasets[1].data.push(voltB); voltageChart.data.datasets[1].data.shift();
+      voltageChart.data.datasets[2].data.push(voltC); voltageChart.data.datasets[2].data.shift();
+      voltageChart.update();
+
+      // Update Amperage Area Chart
+      amperageChart.data.labels.push(nowStr);
+      amperageChart.data.labels.shift();
+      amperageChart.data.datasets[0].data.push(ampA); amperageChart.data.datasets[0].data.shift();
+      amperageChart.data.datasets[1].data.push(ampB); amperageChart.data.datasets[1].data.shift();
+      amperageChart.data.datasets[2].data.push(ampC); amperageChart.data.datasets[2].data.shift();
+      amperageChart.update();
+
+      // Update Pie Chart
+      energyPieChart.data.datasets[0].data[0] = energyMeterA;
+      energyPieChart.update('none');
+    }
+
+    // Inisialisasi awal saat halaman dimuat
+    renderAlarmsTable();
+    simulateSensorTick();
+    setInterval(simulateSensorTick, 2000);
+  </script>
+</body>
+</html>
